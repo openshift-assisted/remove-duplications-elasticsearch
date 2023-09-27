@@ -1,0 +1,72 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: remove-elastic-duplications
+objects:
+- apiVersion: batch/v1
+  kind: CronJob
+  metadata:
+    name: remove-elastic-duplications
+  spec:
+    concurrencyPolicy: ${CONCURRENCY_POLICY}
+    schedule: ${SCHEDULE}
+    suspend: ${{SUSPEND}}
+    jobTemplate:
+      spec:
+        ttlSecondsAfterFinished: 10800 # keep last 3 runs (3 * 1h)
+        backoffLimit: 3
+        template:
+          spec:
+            restartPolicy: OnFailure
+            serviceAccountName: assisted-service
+            containers:
+            - name: remove-elastic-duplications
+              image: ${IMAGE_NAME}:${IMAGE_TAG}
+              imagePullPolicy: ${IMAGE_PULL_POLICY}
+              command: 
+              - remove-elastic-duplications
+              resources:
+                limits:
+                  cpu: 500m
+                  memory: 2000Mi
+                requests:
+                  cpu: 300m
+                  memory: 400Mi
+              env:
+              - name: LOG_LEVEL
+                value: "${LOG_LEVEL}"
+              - name: ES_INDEX
+                value: "${ES_INDEX}"
+              - name: ES_URL
+                valueFrom:
+                  secretKeyRef:
+                    key: endpoint
+                    name: assisted-installer-elasticsearch
+              - name: ES_USER
+                valueFrom:
+                  secretKeyRef:
+                    key: master_user_name
+                    name: elastic-master-credentials
+              - name: ES_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    key: master_user_password
+                    name: elastic-master-credentials
+
+parameters:
+- name: CONCURRENCY_POLICY
+  value: "Forbid"
+- name: SCHEDULE
+  value: "@daily"
+- name: SUSPEND
+  value: "false"
+- name: IMAGE_NAME
+  value: "quay.io/app-sre/remove-duplications-elasticsearch"
+- name: IMAGE_TAG
+  required: true
+- name: IMAGE_PULL_POLICY
+  value: "Always"
+- name: LOG_LEVEL
+  value: "info"
+- name: ES_INDEX
+  required: true
